@@ -1,0 +1,122 @@
+version: "3.9"
+
+services:
+  # ─── PostgreSQL with pgvector ─────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aeka}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aeka_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-aeka}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/docker/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aeka}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis ────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─── MinIO (S3-compatible local storage) ──────────────────────────────
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ─── Backend (FastAPI) ────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      S3_ENDPOINT_URL: http://minio:9000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/app:/app/app  # Hot reload in dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ─── Frontend (Next.js) ───────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/src:/app/src  # Hot reload in dev
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ─── OpenTelemetry Collector ──────────────────────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./infrastructure/observability/otel-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Prometheus metrics
+
+  # ─── Grafana (Dashboards) ─────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/observability/grafana-dashboards:/etc/grafana/provisioning/dashboards
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  grafana_data:

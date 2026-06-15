@@ -1,0 +1,65 @@
+# OpenTelemetry Collector configuration for AEKA
+# Collects traces, metrics, and logs from the backend service
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+  # Add resource attributes
+  resource:
+    attributes:
+      - key: service.namespace
+        value: "aeka"
+        action: upsert
+      - key: deployment.environment
+        value: "${DEPLOYMENT_ENV}"
+        action: upsert
+
+  # Filter out health check spans
+  filter:
+    spans:
+      exclude:
+        match_type: strict
+        attributes:
+          - key: http.target
+            value: "/health"
+
+exporters:
+  # Console output for development
+  logging:
+    verbosity: normal
+
+  # Prometheus metrics endpoint
+  prometheus:
+    endpoint: "0.0.0.0:8888"
+    namespace: "aeka"
+
+  # OTLP export (for Grafana Tempo/Jaeger)
+  otlp/traces:
+    endpoint: "tempo:4317"
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, filter, resource]
+      exporters: [logging, otlp/traces]
+    metrics:
+      receivers: [otlp]
+      processors: [batch, resource]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [logging]
