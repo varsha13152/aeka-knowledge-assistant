@@ -8,8 +8,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy full source for install (hatchling needs it for metadata)
 COPY pyproject.toml .
-RUN pip install --no-cache-dir -e ".[dev]"
+COPY app/__init__.py app/__init__.py
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir ".[dev]"
 
 # ─── Stage 2: Production ───────────────────────────────────────────────────
 FROM python:3.12-slim AS production
