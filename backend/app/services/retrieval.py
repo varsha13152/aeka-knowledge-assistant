@@ -61,9 +61,9 @@ async def hybrid_search(
             content,
             token_count,
             metadata_json,
-            1 - (embedding <=> :embedding::vector) AS similarity
+            1 - (embedding <=> cast(:embedding AS vector)) AS similarity
         FROM document_chunks
-        ORDER BY embedding <=> :embedding::vector
+        ORDER BY embedding <=> cast(:embedding AS vector)
         LIMIT :limit
     """)
 

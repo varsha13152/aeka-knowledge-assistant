@@ -15,6 +15,7 @@ import { useChatStore } from '@/stores/chatStore';
 import { useSSE } from '@/hooks/useSSE';
 import { StreamingMessage } from './StreamingMessage';
 import { AgentSteps } from './AgentSteps';
+import { MarkdownMessage } from './MarkdownMessage';
 
 export function ChatWindow() {
   const [input, setInput] = useState('');
@@ -74,8 +75,12 @@ export function ChatWindow() {
                       : 'bg-white border border-gray-200 shadow-sm'
                   }`}
                 >
-                  <div className="prose-chat text-sm whitespace-pre-wrap">
-                    {msg.content}
+                  <div className="prose-chat text-sm">
+                    {msg.role === 'assistant' ? (
+                      <MarkdownMessage content={msg.content} />
+                    ) : (
+                      <span className="whitespace-pre-wrap">{msg.content}</span>
+                    )}
                   </div>
                   {msg.role === 'assistant' && msg.costUsd !== undefined && (
                     <div className="mt-2 flex items-center gap-3 border-t pt-2 text-xs text-gray-400">

@@ -70,25 +70,22 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# ─── Middleware (order matters: last added = first executed) ─────────────────
-
-from app.core.middleware import ErrorHandlerMiddleware, RequestIDMiddleware
+# ─── Middleware ──────────────────────────────────────────────────────────────
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:3000"],
+    allow_origins=[settings.frontend_url, "http://localhost:3000", "http://localhost:3002"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(RequestIDMiddleware)
-app.add_middleware(ErrorHandlerMiddleware)
 
 # ─── OpenTelemetry Instrumentation ─────────────────────────────────────────
-
-if settings.app_env != "development" or True:  # Enable in all envs for now
-    from app.core.observability import instrument_app
-    instrument_app(app)
+# Disabled: FastAPI instrumentation has a bug with _IncludedRouter objects
+# TODO: Re-enable after upgrading opentelemetry-instrumentation-fastapi
+# if settings.app_env == "production":
+#     from app.core.observability import instrument_app
+#     instrument_app(app)
 
 # ─── Routes ─────────────────────────────────────────────────────────────────
 

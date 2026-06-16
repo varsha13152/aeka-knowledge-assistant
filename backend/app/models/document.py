@@ -131,8 +131,8 @@ class HITLReviewItem(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    message_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("chat_messages.id"), nullable=False
+    message_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("chat_messages.id"), nullable=True
     )
     query: Mapped[str] = mapped_column(Text, nullable=False)
     generated_answer: Mapped[str] = mapped_column(Text, nullable=False)

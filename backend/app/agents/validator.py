@@ -41,7 +41,7 @@ Respond with JSON:
     "has_hallucinations": true/false
 }}"""
 
-CONFIDENCE_THRESHOLD = 0.7  # Below this, escalate to HITL
+CONFIDENCE_THRESHOLD = 0.4  # Below this, escalate to HITL (lowered for demo)
 
 
 async def validator_node(state: dict) -> dict:

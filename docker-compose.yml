@@ -87,7 +87,7 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
-      - "3000:3000"
+      - "3002:3000"
     volumes:
       - ./frontend/src:/app/src  # Hot reload in dev
     depends_on:

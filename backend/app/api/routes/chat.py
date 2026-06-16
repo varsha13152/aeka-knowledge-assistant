@@ -32,7 +32,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     session_id: uuid.UUID
-    message_id: uuid.UUID
+    message_id: uuid.UUID | None = None
     content: str
     sources: list[dict]
     agent_steps: list[dict]
@@ -187,22 +187,11 @@ async def _stream_agent_response(db: DBSession, session_id: uuid.UUID, query: st
     - event: error       → Error occurred
     """
     try:
-        # Invoke the agent graph
-        initial_state: AgentState = {
+        # Invoke the agent graph — only pass input keys, LangGraph fills the rest
+        initial_state = {
             "query": query,
             "session_id": str(session_id),
             "messages": [{"role": "user", "content": query}],
-            "intent": "",
-            "routed_to": "",
-            "context_chunks": [],
-            "raw_answer": "",
-            "sources": [],
-            "confidence_score": 0.0,
-            "hallucination_flags": [],
-            "is_valid": False,
-            "final_answer": "",
-            "requires_review": False,
-            "review_reason": "",
             "agent_steps": [],
             "total_tokens": 0,
             "total_cost": 0.0,

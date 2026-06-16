@@ -19,11 +19,11 @@ Classify the user's query into one of these intents:
 - "direct": The query can be answered without document search (greetings, system questions, simple math)
 
 Respond with JSON only:
-{
+{{
     "intent": "question" | "summary" | "direct",
     "reasoning": "brief explanation of why",
     "keywords": ["key", "terms", "for", "search"]
-}
+}}
 
 User query: {query}"""
 

@@ -26,10 +26,10 @@ async def escalation_node(state: dict) -> dict:
     review_reason = state.get("review_reason", "Low confidence score")
     hallucination_flags = state.get("hallucination_flags", [])
 
-    # Create HITL review item
+    # Create HITL review item (message_id linked after message is stored)
     async with async_session_factory() as db:
         review_item = HITLReviewItem(
-            message_id=uuid.uuid4(),  # Will be linked to actual message in production
+            message_id=None,
             query=query,
             generated_answer=raw_answer,
             confidence_score=confidence,
