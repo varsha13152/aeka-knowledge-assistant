@@ -6,7 +6,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import chat, documents, search
+from app.api.routes import auth, chat, documents, mcp_routes, metrics, review, search
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -70,7 +70,10 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS
+# ─── Middleware (order matters: last added = first executed) ─────────────────
+
+from app.core.middleware import ErrorHandlerMiddleware, RequestIDMiddleware
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url, "http://localhost:3000"],
@@ -78,12 +81,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(ErrorHandlerMiddleware)
+
+# ─── OpenTelemetry Instrumentation ─────────────────────────────────────────
+
+if settings.app_env != "development" or True:  # Enable in all envs for now
+    from app.core.observability import instrument_app
+    instrument_app(app)
 
 # ─── Routes ─────────────────────────────────────────────────────────────────
 
+app.include_router(auth.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
+app.include_router(review.router, prefix="/api/v1")
+app.include_router(metrics.router, prefix="/api/v1")
+app.include_router(mcp_routes.router, prefix="/api/v1")
 
 
 @app.get("/health")

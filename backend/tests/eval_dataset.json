@@ -1,0 +1,107 @@
+[
+  {
+    "id": "eval-001",
+    "query": "What are the three states of matter?",
+    "expected_answer": "The three states of matter are solid, liquid, and gas. In a solid, particles are tightly packed and vibrate in place. In a liquid, particles are close together but can move around each other. In a gas, particles are far apart and move freely.",
+    "required_sources": [],
+    "category": "matter"
+  },
+  {
+    "id": "eval-002",
+    "query": "How does photosynthesis work?",
+    "expected_answer": "Photosynthesis is the process by which plants make food using sunlight. Plants absorb carbon dioxide from the air and water from the soil. Using energy from sunlight, they convert these into glucose (food) and release oxygen as a by-product.",
+    "required_sources": [],
+    "category": "plants"
+  },
+  {
+    "id": "eval-003",
+    "query": "What is the water cycle?",
+    "expected_answer": "The water cycle describes how water moves continuously between the Earth's surface and the atmosphere. It involves evaporation (water turning into water vapour), condensation (water vapour turning into clouds), and precipitation (water falling as rain or snow).",
+    "required_sources": [],
+    "category": "water"
+  },
+  {
+    "id": "eval-004",
+    "query": "Why do magnets attract and repel?",
+    "expected_answer": "Magnets have two poles: North and South. Like poles (North-North or South-South) repel each other, while unlike poles (North-South) attract each other. This is due to the magnetic field lines that flow from the North pole to the South pole.",
+    "required_sources": [],
+    "category": "magnets"
+  },
+  {
+    "id": "eval-005",
+    "query": "What is an electrical circuit?",
+    "expected_answer": "An electrical circuit is a complete path through which electricity can flow. It needs a power source (like a battery), connecting wires, and a component (like a light bulb). If the circuit is broken (open circuit), electricity cannot flow and the bulb won't light up.",
+    "required_sources": [],
+    "category": "electricity"
+  },
+  {
+    "id": "eval-006",
+    "query": "How do plants reproduce?",
+    "expected_answer": "Plants reproduce in several ways. Flowering plants reproduce through pollination — pollen from the stamen reaches the pistil, fertilises the ovule, which develops into a seed. Seeds are dispersed by wind, water, animals, or explosive mechanisms. Some plants also reproduce without seeds through runners, tubers, or cuttings.",
+    "required_sources": [],
+    "category": "plants"
+  },
+  {
+    "id": "eval-007",
+    "query": "What are the parts of the human digestive system?",
+    "expected_answer": "The digestive system breaks down food for the body to use. It includes: the mouth (chewing and saliva), oesophagus (food pipe), stomach (acid breaks down food), small intestine (nutrients absorbed), large intestine (water absorbed), and anus (waste removed).",
+    "required_sources": [],
+    "category": "human-body"
+  },
+  {
+    "id": "eval-008",
+    "query": "How does heat travel?",
+    "expected_answer": "Heat travels in three ways: conduction (through direct contact, like a metal spoon in hot soup), convection (through moving fluids, like hot air rising), and radiation (through electromagnetic waves, like heat from the sun reaching Earth without needing a medium).",
+    "required_sources": [],
+    "category": "heat"
+  },
+  {
+    "id": "eval-009",
+    "query": "What is the difference between a conductor and an insulator?",
+    "expected_answer": "A conductor is a material that allows electricity or heat to pass through it easily. Examples include metals like copper and iron. An insulator is a material that does not allow electricity or heat to pass through easily. Examples include rubber, plastic, and wood.",
+    "required_sources": [],
+    "category": "electricity"
+  },
+  {
+    "id": "eval-010",
+    "query": "Why do we have day and night?",
+    "expected_answer": "We have day and night because the Earth rotates (spins) on its axis. One full rotation takes about 24 hours. The side of the Earth facing the Sun experiences day, while the side facing away from the Sun experiences night.",
+    "required_sources": [],
+    "category": "earth-and-space"
+  },
+  {
+    "id": "eval-011",
+    "query": "What are the characteristics of living things?",
+    "expected_answer": "Living things share seven characteristics: they move, respire (breathe), are sensitive to their environment, grow, reproduce, excrete (remove waste), and need nutrition (food). These are sometimes remembered using the acronym MRS GREN.",
+    "required_sources": [],
+    "category": "living-things"
+  },
+  {
+    "id": "eval-012",
+    "query": "How do we classify animals?",
+    "expected_answer": "Animals can be classified into vertebrates (with backbones) and invertebrates (without backbones). Vertebrates are further divided into mammals, birds, reptiles, amphibians, and fish. They are classified based on features like body covering, how they breathe, and how they reproduce.",
+    "required_sources": [],
+    "category": "living-things"
+  },
+  {
+    "id": "eval-013",
+    "query": "What factors affect the rate of evaporation?",
+    "expected_answer": "The rate of evaporation is affected by: temperature (higher temperature = faster evaporation), wind (more wind = faster evaporation), surface area (larger area = faster evaporation), and humidity (lower humidity = faster evaporation).",
+    "required_sources": [],
+    "category": "water"
+  },
+  {
+    "id": "eval-014",
+    "query": "How do shadows form and change?",
+    "expected_answer": "Shadows form when an opaque object blocks light. The shadow appears on the opposite side from the light source. Shadows change based on the position of the light: when the light source is low, shadows are long; when the light source is directly above, shadows are short.",
+    "required_sources": [],
+    "category": "light"
+  },
+  {
+    "id": "eval-015",
+    "query": "What is a food chain?",
+    "expected_answer": "A food chain shows how energy and nutrients pass from one living thing to another. It starts with a producer (usually a plant), followed by a primary consumer (herbivore), then a secondary consumer (carnivore). For example: grass → grasshopper → frog → snake → eagle.",
+    "required_sources": [],
+    "category": "ecosystems"
+  }
+]
