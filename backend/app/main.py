@@ -14,6 +14,16 @@ from app.core.rate_limit import limiter
 
 settings = get_settings()
 
+# ─── Sentry Error Monitoring ──────────────────────────────────────────────
+if settings.sentry_dsn:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.app_env,
+        traces_sample_rate=0.1 if settings.app_env == "production" else 1.0,
+        profiles_sample_rate=0.1 if settings.app_env == "production" else 0.0,
+    )
+
 # Configure structured logging
 structlog.configure(
     processors=[
@@ -36,6 +46,13 @@ logger = structlog.get_logger()
 async def lifespan(app: FastAPI):
     """Application lifecycle: startup and shutdown hooks."""
     logger.info("Starting AEKA backend", env=settings.app_env)
+
+    # Validate Clerk configuration
+    if settings.app_env != "development" and not settings.clerk_jwks_url:
+        raise RuntimeError(
+            "FATAL: CLERK_JWKS_URL not configured. "
+            "Set it to https://<your-clerk-domain>/.well-known/jwks.json"
+        )
 
     # Ensure storage bucket exists (idempotent)
     from app.services.storage import storage_service
@@ -102,8 +119,51 @@ app.include_router(mcp_routes.router, prefix="/api/v1")
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for container orchestration."""
-    return {"status": "healthy", "service": "aeka-backend", "version": "0.1.0"}
+    """Health check endpoint for container orchestration.
+
+    Pings all external dependencies and reports degraded status if any are down.
+    """
+    checks: dict[str, str] = {}
+
+    # Check PostgreSQL
+    try:
+        from app.db.session import async_session_factory
+        from sqlalchemy import text as sa_text
+
+        async with async_session_factory() as db:
+            await db.execute(sa_text("SELECT 1"))
+        checks["postgres"] = "ok"
+    except Exception:
+        checks["postgres"] = "down"
+
+    # Check Redis
+    try:
+        import redis.asyncio as aioredis
+
+        r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2)
+        await r.ping()
+        await r.aclose()
+        checks["redis"] = "ok"
+    except Exception:
+        checks["redis"] = "down"
+
+    # Check R2 (storage)
+    try:
+        from app.services.storage import storage_service
+
+        storage_service._client.head_bucket(Bucket=storage_service.bucket)
+        checks["storage"] = "ok"
+    except Exception:
+        checks["storage"] = "down"
+
+    overall = "healthy" if all(v == "ok" for v in checks.values()) else "degraded"
+
+    return {
+        "status": overall,
+        "service": "aeka-backend",
+        "version": "0.1.0",
+        "checks": checks,
+    }
 
 
 @app.get("/")

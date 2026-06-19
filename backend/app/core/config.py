@@ -59,11 +59,10 @@ class Settings(BaseSettings):
     # ─── LLM ────────────────────────────────────────────────────────────
     openai_api_key: str = ""
     anthropic_api_key: str = ""
-    google_api_key: str = ""
 
-    default_llm_provider: Literal["openai", "anthropic", "google"] = "openai"
+    default_llm_provider: Literal["openai", "anthropic"] = "openai"
     default_llm_model: str = "gpt-4o"
-    fallback_llm_provider: Literal["openai", "anthropic", "google"] = "anthropic"
+    fallback_llm_provider: Literal["openai", "anthropic"] = "anthropic"
     fallback_llm_model: str = "claude-sonnet-4-6-20250514"
 
     # ─── Embeddings ─────────────────────────────────────────────────────
@@ -71,6 +70,7 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1536
 
     # ─── Observability ──────────────────────────────────────────────────
+    sentry_dsn: str = ""  # Set to enable Sentry error tracking
     otel_exporter_otlp_endpoint: str = "http://localhost:4317"
     otel_service_name: str = "aeka-backend"
     log_level: str = "INFO"

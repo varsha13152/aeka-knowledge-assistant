@@ -82,16 +82,19 @@ async def chat_completion(request: ChatRequest, req: Request, db: DBSession, use
     When use_agents=False:
     - Direct RAG: retrieve → generate (simpler, faster)
     """
-    # Get or create session
+    # Get or create session (scoped to current user)
     if request.session_id:
         result = await db.execute(
-            select(ChatSession).where(ChatSession.id == request.session_id)
+            select(ChatSession).where(
+                ChatSession.id == request.session_id,
+                ChatSession.user_id == user.id,
+            )
         )
         session = result.scalar_one_or_none()
         if not session:
             raise HTTPException(status_code=404, detail="Chat session not found")
     else:
-        session = ChatSession(title=request.message[:100])
+        session = ChatSession(title=request.message[:100], user_id=user.id)
         db.add(session)
         await db.flush()
 
@@ -329,10 +332,13 @@ async def _stream_direct_response(
 
 @router.get("/sessions")
 async def list_sessions(db: DBSession, user: CurrentUser, limit: int = 20):
-    """List recent chat sessions."""
+    """List chat sessions owned by the current user."""
     limit = min(limit, 50)  # Cap pagination
     result = await db.execute(
-        select(ChatSession).order_by(ChatSession.created_at.desc()).limit(limit)
+        select(ChatSession)
+        .where(ChatSession.user_id == user.id)
+        .order_by(ChatSession.created_at.desc())
+        .limit(limit)
     )
     sessions = result.scalars().all()
     return [
@@ -343,7 +349,15 @@ async def list_sessions(db: DBSession, user: CurrentUser, limit: int = 20):
 
 @router.get("/sessions/{session_id}/messages")
 async def get_session_messages(session_id: uuid.UUID, db: DBSession, user: CurrentUser):
-    """Get all messages in a chat session."""
+    """Get all messages in a chat session (must be owned by current user)."""
+    # Verify session ownership
+    session_result = await db.execute(
+        select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user.id)
+    )
+    if not session_result.scalar_one_or_none():
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Session not found")
+
     result = await db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
