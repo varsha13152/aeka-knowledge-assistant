@@ -17,6 +17,7 @@ import { StreamingMessage } from './StreamingMessage';
 import { AgentSteps } from './AgentSteps';
 import { MarkdownMessage } from './MarkdownMessage';
 import { SourceCitations } from './SourceCitations';
+import { FeedbackButtons } from './FeedbackButtons';
 import { DocumentModal } from '@/components/documents/DocumentModal';
 import type { Message } from '@/stores/chatStore';
 
@@ -50,6 +51,9 @@ const MessageBubble = memo(function MessageBubble({ msg }: { msg: Message }) {
             <span>{msg.latencyMs}ms</span>
             <span>${msg.costUsd?.toFixed(4)}</span>
           </div>
+        )}
+        {msg.role === 'assistant' && (
+          <FeedbackButtons messageId={msg.id} />
         )}
       </div>
     </div>

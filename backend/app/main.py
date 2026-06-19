@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api.routes import chat, documents, mcp_routes, metrics, review, search
+from app.api.routes import chat, documents, feedback, mcp_routes, metrics, review, search
 from app.core.config import get_settings
 from app.core.rate_limit import limiter
 
@@ -112,6 +112,7 @@ app.add_middleware(
 app.include_router(documents.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
+app.include_router(feedback.router, prefix="/api/v1")
 app.include_router(review.router, prefix="/api/v1")
 app.include_router(metrics.router, prefix="/api/v1")
 app.include_router(mcp_routes.router, prefix="/api/v1")

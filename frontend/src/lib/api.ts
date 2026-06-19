@@ -117,6 +117,21 @@ class ApiClient {
   async getMetrics(timeRange = '7d') {
     return this.request<any>(`/api/v1/metrics?range=${timeRange}`);
   }
+
+  // ─── Feedback ──────────────────────────────────────────────────────
+  async submitFeedback(messageId: string, rating: 'thumbs_up' | 'thumbs_down', comment?: string) {
+    return this.request<any>('/api/v1/feedback/', {
+      method: 'POST',
+      body: JSON.stringify({ message_id: messageId, rating, comment }),
+    });
+  }
+
+  async submitGeneralFeedback(category: string, message: string) {
+    return this.request<any>('/api/v1/feedback/general', {
+      method: 'POST',
+      body: JSON.stringify({ category, message }),
+    });
+  }
 }
 
 export const api = new ApiClient(BASE_URL);

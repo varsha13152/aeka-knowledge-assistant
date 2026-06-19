@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { ClerkProvider, UserButton, SignInButton } from '@clerk/nextjs';
 import { TokenProvider } from '@/components/auth/TokenProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { FeedbackButton } from '@/components/FeedbackButton';
 import { QueryProvider } from '@/components/QueryProvider';
 import './globals.css';
 
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <a href="/documents" className="text-sm hover:text-brand-600">Documents</a>
                   <a href="/admin/review" className="text-sm hover:text-brand-600">Review Queue</a>
                   <a href="/dashboard" className="text-sm hover:text-brand-600">Dashboard</a>
+                  <FeedbackButton />
                   <UserButton />
                 </div>
               </nav>
