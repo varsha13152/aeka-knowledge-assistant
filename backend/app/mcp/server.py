@@ -130,6 +130,8 @@ TOOLS: list[ToolDefinition] = [
 
 async def execute_tool(name: str, arguments: dict) -> ToolResult:
     """Execute an MCP tool by name with the given arguments."""
+    from jsonschema import ValidationError, validate
+
     handlers = {
         "document_search": _handle_document_search,
         "get_document_info": _handle_get_document_info,
@@ -141,10 +143,18 @@ async def execute_tool(name: str, arguments: dict) -> ToolResult:
     if not handler:
         return ToolResult(content=f"Unknown tool: {name}", is_error=True)
 
+    # Validate arguments against the tool's input_schema
+    tool_def = next((t for t in TOOLS if t.name == name), None)
+    if tool_def and tool_def.input_schema:
+        try:
+            validate(instance=arguments, schema=tool_def.input_schema)
+        except ValidationError as e:
+            return ToolResult(content=f"Invalid arguments: {e.message}", is_error=True)
+
     try:
         return await handler(arguments)
     except Exception as e:
-        return ToolResult(content=f"Tool execution error: {str(e)}", is_error=True)
+        return ToolResult(content="Tool execution error", is_error=True)
 
 
 async def _handle_document_search(args: dict) -> ToolResult:

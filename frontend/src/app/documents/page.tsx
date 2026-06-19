@@ -4,9 +4,9 @@
  * Document management page — upload, view, and delete documents.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 
 interface Document {
   id: string;
@@ -19,23 +19,15 @@ interface Document {
 }
 
 export default function DocumentsPage() {
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const queryClient = useQueryClient();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
 
-  const fetchDocuments = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/v1/documents/`);
-      const data = await res.json();
-      setDocuments(data.documents);
-    } catch (err) {
-      console.error('Failed to fetch documents:', err);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchDocuments();
-  }, [fetchDocuments]);
+  const { data, isLoading } = useQuery({
+    queryKey: ['documents'],
+    queryFn: () => api.listDocuments(),
+  });
+  const documents = data?.documents ?? [];
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -48,15 +40,9 @@ export default function DocumentsPage() {
     formData.append('file', file);
 
     try {
-      const res = await fetch(`${API_URL}/api/v1/documents/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!res.ok) throw new Error(`Upload failed: ${res.statusText}`);
-
+      await api.uploadDocument(file);
       setUploadProgress('Processing document...');
-      await fetchDocuments();
+      await queryClient.invalidateQueries({ queryKey: ['documents'] });
       setUploadProgress('');
     } catch (err: any) {
       setUploadProgress(`Error: ${err.message}`);
@@ -69,8 +55,8 @@ export default function DocumentsPage() {
     if (!confirm('Delete this document and all its chunks?')) return;
 
     try {
-      await fetch(`${API_URL}/api/v1/documents/${id}`, { method: 'DELETE' });
-      await fetchDocuments();
+      await api.deleteDocument(id);
+      await queryClient.invalidateQueries({ queryKey: ['documents'] });
     } catch (err) {
       console.error('Delete failed:', err);
     }

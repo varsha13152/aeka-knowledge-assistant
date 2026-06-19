@@ -3,43 +3,89 @@
 /**
  * Main chat interface — streaming messages with agent step visualization.
  *
- * Features:
- * - SSE streaming display with typing indicator
- * - Source citations with expandable previews
- * - Agent activity sidebar
- * - Message history
+ * Performance optimizations:
+ * - Individual Zustand selectors (avoids full-store re-renders)
+ * - Memoized message items (only re-render when their data changes)
+ * - Auto-scroll to bottom on new messages
+ * - Lazy-loaded document modal
  */
 
-import { FormEvent, useRef, useState } from 'react';
+import { FormEvent, memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useChatStore } from '@/stores/chatStore';
 import { useSSE } from '@/hooks/useSSE';
 import { StreamingMessage } from './StreamingMessage';
 import { AgentSteps } from './AgentSteps';
 import { MarkdownMessage } from './MarkdownMessage';
+import { SourceCitations } from './SourceCitations';
+import { DocumentModal } from '@/components/documents/DocumentModal';
+import type { Message } from '@/stores/chatStore';
+
+// ─── Memoized Message Bubble ─────────────────────────────────────────────────
+
+const MessageBubble = memo(function MessageBubble({ msg }: { msg: Message }) {
+  return (
+    <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+          msg.role === 'user'
+            ? 'bg-brand-600 text-white'
+            : msg.role === 'system'
+            ? 'bg-red-50 text-red-700 border border-red-200'
+            : 'bg-white border border-gray-200 shadow-sm'
+        }`}
+      >
+        <div className="prose-chat text-sm">
+          {msg.role === 'assistant' ? (
+            <MarkdownMessage content={msg.content} />
+          ) : (
+            <span className="whitespace-pre-wrap">{msg.content}</span>
+          )}
+        </div>
+        {msg.role === 'assistant' && msg.sources && (
+          <SourceCitations sources={msg.sources} />
+        )}
+        {msg.role === 'assistant' && msg.costUsd !== undefined && (
+          <div className="mt-2 flex items-center gap-3 border-t pt-2 text-xs text-gray-400">
+            <span>{msg.model}</span>
+            <span>{msg.latencyMs}ms</span>
+            <span>${msg.costUsd?.toFixed(4)}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// ─── Main Chat Window ────────────────────────────────────────────────────────
 
 export function ChatWindow() {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const {
-    messages,
-    isLoading,
-    isStreaming,
-    streamingContent,
-    activeAgentSteps,
-    showAgentPanel,
-    toggleAgentPanel,
-  } = useChatStore();
+  // Individual selectors — only re-render when specific values change
+  const messages = useChatStore((s) => s.messages);
+  const isLoading = useChatStore((s) => s.isLoading);
+  const isStreaming = useChatStore((s) => s.isStreaming);
+  const streamingContent = useChatStore((s) => s.streamingContent);
+  const activeAgentSteps = useChatStore((s) => s.activeAgentSteps);
+  const showAgentPanel = useChatStore((s) => s.showAgentPanel);
+  const activeDocument = useChatStore((s) => s.activeDocument);
+  const toggleAgentPanel = useChatStore((s) => s.toggleAgentPanel);
+  const closeDocumentViewer = useChatStore((s) => s.closeDocumentViewer);
 
   const { sendMessage, abort } = useSSE();
 
-  const handleSubmit = (e: FormEvent) => {
+  // Auto-scroll to bottom on new messages or streaming content
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamingContent]);
+
+  const handleSubmit = useCallback((e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
-
     sendMessage({ message: input.trim() });
     setInput('');
-  };
+  }, [input, isLoading, sendMessage]);
 
   return (
     <div className="flex h-full">
@@ -62,35 +108,7 @@ export function ChatWindow() {
             )}
 
             {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                    msg.role === 'user'
-                      ? 'bg-brand-600 text-white'
-                      : msg.role === 'system'
-                      ? 'bg-red-50 text-red-700 border border-red-200'
-                      : 'bg-white border border-gray-200 shadow-sm'
-                  }`}
-                >
-                  <div className="prose-chat text-sm">
-                    {msg.role === 'assistant' ? (
-                      <MarkdownMessage content={msg.content} />
-                    ) : (
-                      <span className="whitespace-pre-wrap">{msg.content}</span>
-                    )}
-                  </div>
-                  {msg.role === 'assistant' && msg.costUsd !== undefined && (
-                    <div className="mt-2 flex items-center gap-3 border-t pt-2 text-xs text-gray-400">
-                      <span>{msg.model}</span>
-                      <span>{msg.latencyMs}ms</span>
-                      <span>${msg.costUsd?.toFixed(4)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <MessageBubble key={msg.id} msg={msg} />
             ))}
 
             {/* Streaming message */}
@@ -128,6 +146,8 @@ export function ChatWindow() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask a question about your documents..."
+              maxLength={10000}
+              aria-label="Chat message input"
               className="flex-1 rounded-xl border border-gray-300 px-4 py-3 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
               disabled={isLoading}
             />
@@ -155,6 +175,7 @@ export function ChatWindow() {
                 showAgentPanel ? 'border-brand-500 text-brand-600' : 'border-gray-300 text-gray-500'
               }`}
               title="Toggle agent activity panel"
+              aria-label="Toggle agent activity panel"
             >
               🤖
             </button>
@@ -167,6 +188,18 @@ export function ChatWindow() {
         <div className="w-80 border-l bg-gray-50 overflow-y-auto">
           <AgentSteps steps={activeAgentSteps} />
         </div>
+      )}
+
+      {/* Document viewer modal */}
+      {activeDocument && (
+        <DocumentModal
+          documentId={activeDocument.documentId}
+          filename={activeDocument.filename}
+          contentType={activeDocument.contentType}
+          initialPage={activeDocument.page}
+          highlightText={activeDocument.highlightText}
+          onClose={closeDocumentViewer}
+        />
       )}
     </div>
   );

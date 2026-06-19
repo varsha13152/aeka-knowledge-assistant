@@ -43,7 +43,7 @@ class UpdateReviewRequest(BaseModel):
 
 
 @router.get("/queue", response_model=ReviewQueueResponse)
-async def get_review_queue(db: DBSession):
+async def get_review_queue(db: DBSession, current_user: AdminUser):
     """Get all items in the review queue (pending first)."""
     result = await db.execute(
         select(HITLReviewItem).order_by(
@@ -75,7 +75,7 @@ async def get_review_queue(db: DBSession):
 
 
 @router.patch("/{item_id}")
-async def update_review_item(item_id: uuid.UUID, request: UpdateReviewRequest, db: DBSession):
+async def update_review_item(item_id: uuid.UUID, request: UpdateReviewRequest, db: DBSession, current_user: AdminUser):
     """Approve, reject, or edit a review item."""
     result = await db.execute(select(HITLReviewItem).where(HITLReviewItem.id == item_id))
     item = result.scalar_one_or_none()

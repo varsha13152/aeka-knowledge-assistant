@@ -4,8 +4,9 @@ Combines dense vector similarity (cosine) with sparse keyword matching
 using PostgreSQL's full-text search, then fuses results via Reciprocal Rank Fusion.
 """
 
+import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +26,10 @@ class RetrievalResult:
     keyword_score: float  # BM25-style rank score
     fused_score: float  # RRF combined score
     metadata: dict | None = None
+    filename: str | None = None
+    content_type: str | None = None
+    page_start: int | None = None
+    page_end: int | None = None
 
 
 async def hybrid_search(
@@ -53,17 +58,23 @@ async def hybrid_search(
     # Get query embedding
     query_embedding = await embedding_service.embed_single(query)
 
+    # Set IVFFlat probes for better recall (default is 1, which only searches 1 list)
+    await db.execute(text("SET LOCAL ivfflat.probes = 10"))
+
     # ─── Semantic Search (pgvector cosine distance) ─────────────────────
     semantic_sql = text("""
         SELECT
-            id AS chunk_id,
-            document_id,
-            content,
-            token_count,
-            metadata_json,
-            1 - (embedding <=> cast(:embedding AS vector)) AS similarity
-        FROM document_chunks
-        ORDER BY embedding <=> cast(:embedding AS vector)
+            dc.id AS chunk_id,
+            dc.document_id,
+            dc.content,
+            dc.token_count,
+            dc.metadata_json,
+            d.filename,
+            d.content_type,
+            1 - (dc.embedding <=> cast(:embedding AS vector)) AS similarity
+        FROM document_chunks dc
+        JOIN documents d ON d.id = dc.document_id
+        ORDER BY dc.embedding <=> cast(:embedding AS vector)
         LIMIT :limit
     """)
 
@@ -76,17 +87,20 @@ async def hybrid_search(
     # ─── Keyword Search (PostgreSQL full-text search) ───────────────────
     keyword_sql = text("""
         SELECT
-            id AS chunk_id,
-            document_id,
-            content,
-            token_count,
-            metadata_json,
+            dc.id AS chunk_id,
+            dc.document_id,
+            dc.content,
+            dc.token_count,
+            dc.metadata_json,
+            d.filename,
+            d.content_type,
             ts_rank_cd(
-                to_tsvector('english', content),
+                to_tsvector('english', dc.content),
                 plainto_tsquery('english', :query)
             ) AS rank
-        FROM document_chunks
-        WHERE to_tsvector('english', content) @@ plainto_tsquery('english', :query)
+        FROM document_chunks dc
+        JOIN documents d ON d.id = dc.document_id
+        WHERE to_tsvector('english', dc.content) @@ plainto_tsquery('english', :query)
         ORDER BY rank DESC
         LIMIT :limit
     """)
@@ -110,6 +124,8 @@ async def hybrid_search(
             "content": row.content,
             "token_count": row.token_count,
             "metadata": row.metadata_json,
+            "filename": row.filename,
+            "content_type": row.content_type,
             "semantic_score": float(row.similarity),
             "keyword_score": 0.0,
             "rrf_semantic": rrf_score,
@@ -131,6 +147,8 @@ async def hybrid_search(
                 "content": row.content,
                 "token_count": row.token_count,
                 "metadata": row.metadata_json,
+                "filename": row.filename,
+                "content_type": row.content_type,
                 "semantic_score": 0.0,
                 "keyword_score": float(row.rank),
                 "rrf_semantic": 0.0,
@@ -141,6 +159,19 @@ async def hybrid_search(
     results = []
     for data in chunk_scores.values():
         fused = data["rrf_semantic"] + data["rrf_keyword"]
+
+        # Parse page numbers from metadata_json
+        page_start = None
+        page_end = None
+        metadata_raw = data["metadata"]
+        if metadata_raw:
+            try:
+                meta = json.loads(metadata_raw) if isinstance(metadata_raw, str) else metadata_raw
+                page_start = meta.get("page_start")
+                page_end = meta.get("page_end")
+            except (json.JSONDecodeError, TypeError):
+                pass
+
         results.append(
             RetrievalResult(
                 chunk_id=data["chunk_id"],
@@ -150,7 +181,11 @@ async def hybrid_search(
                 semantic_score=data["semantic_score"],
                 keyword_score=data["keyword_score"],
                 fused_score=fused,
-                metadata=data["metadata"],
+                metadata=metadata_raw,
+                filename=data["filename"],
+                content_type=data["content_type"],
+                page_start=page_start,
+                page_end=page_end,
             )
         )
 

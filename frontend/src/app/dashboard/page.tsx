@@ -23,6 +23,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
+import { api } from '@/lib/api';
 
 // Mock data for dashboard — in production, fetched from /api/v1/metrics
 const MOCK_COST_DATA = [
@@ -62,12 +63,29 @@ interface MetricCard {
 }
 
 export default function DashboardPage() {
-  const [metrics] = useState<MetricCard[]>([
-    { label: 'Total Queries Today', value: '1,284', change: '+12%', trend: 'up' },
-    { label: 'Avg Latency (p50)', value: '520ms', change: '-8%', trend: 'down' },
-    { label: 'Cost Today', value: '$7.32', change: '+15%', trend: 'up' },
-    { label: 'Quality Score', value: '0.87', change: '+2%', trend: 'up' },
+  const [metrics, setMetrics] = useState<MetricCard[]>([
+    { label: 'Total Queries Today', value: '—', change: '', trend: 'neutral' },
+    { label: 'Avg Latency (p50)', value: '—', change: '', trend: 'neutral' },
+    { label: 'Cost Today', value: '—', change: '', trend: 'neutral' },
+    { label: 'Quality Score', value: '—', change: '', trend: 'neutral' },
   ]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getMetrics('7d')
+      .then((data) => {
+        const report = data.drift_report || {};
+        const m = report.metrics || {};
+        setMetrics([
+          { label: 'Total Queries Today', value: String(m.total_queries ?? '—'), change: '', trend: 'neutral' },
+          { label: 'Avg Latency (p50)', value: m.avg_latency_ms ? `${m.avg_latency_ms}ms` : '—', change: '', trend: 'neutral' },
+          { label: 'Cost Today', value: m.total_cost_usd ? `$${m.total_cost_usd.toFixed(2)}` : '—', change: '', trend: 'neutral' },
+          { label: 'Quality Score', value: m.avg_quality ? m.avg_quality.toFixed(2) : '—', change: '', trend: 'neutral' },
+        ]);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div className="p-6 overflow-y-auto h-full">

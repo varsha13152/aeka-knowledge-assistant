@@ -2,9 +2,7 @@
 
 import hashlib
 import json
-from typing import Any
 
-import numpy as np
 import redis.asyncio as redis
 from openai import AsyncOpenAI
 
@@ -64,14 +62,21 @@ class EmbeddingService:
         uncached_indices: list[int] = []
         uncached_texts: list[str] = []
 
-        # Check cache for all texts
-        for i, text in enumerate(texts):
-            cached = await self._get_cached(text)
-            if cached is not None:
-                results[i] = cached
-            else:
-                uncached_indices.append(i)
-                uncached_texts.append(text)
+        # Batch cache check using MGET (single round-trip instead of N)
+        try:
+            r = await self._get_redis()
+            keys = [self._cache_key(text) for text in texts]
+            cached_values = await r.mget(keys)
+            for i, cached in enumerate(cached_values):
+                if cached:
+                    results[i] = json.loads(cached)
+                else:
+                    uncached_indices.append(i)
+                    uncached_texts.append(texts[i])
+        except Exception:
+            # Redis unavailable — treat all as uncached
+            uncached_indices = list(range(len(texts)))
+            uncached_texts = list(texts)
 
         # Batch embed uncached texts
         for batch_start in range(0, len(uncached_texts), batch_size):
@@ -82,10 +87,21 @@ class EmbeddingService:
                 dimensions=self.dimensions,
             )
 
-            for j, data in enumerate(response.data):
-                idx = uncached_indices[batch_start + j]
-                results[idx] = data.embedding
-                await self._set_cached(uncached_texts[batch_start + j], data.embedding)
+            # Batch cache write using pipeline (single round-trip)
+            try:
+                r = await self._get_redis()
+                pipe = r.pipeline()
+                for j, data in enumerate(response.data):
+                    idx = uncached_indices[batch_start + j]
+                    results[idx] = data.embedding
+                    key = self._cache_key(uncached_texts[batch_start + j])
+                    pipe.set(key, json.dumps(data.embedding), ex=604800)
+                await pipe.execute()
+            except Exception:
+                # Cache write failure — still store results in memory
+                for j, data in enumerate(response.data):
+                    idx = uncached_indices[batch_start + j]
+                    results[idx] = data.embedding
 
         return results  # type: ignore[return-value]
 
@@ -110,12 +126,6 @@ class EmbeddingService:
         except Exception:
             pass  # Cache write failure is non-fatal
 
-    @staticmethod
-    def cosine_similarity(a: list[float], b: list[float]) -> float:
-        """Compute cosine similarity between two vectors."""
-        a_arr = np.array(a)
-        b_arr = np.array(b)
-        return float(np.dot(a_arr, b_arr) / (np.linalg.norm(a_arr) * np.linalg.norm(b_arr)))
 
 
 # Singleton instance

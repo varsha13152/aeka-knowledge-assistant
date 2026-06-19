@@ -25,10 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && adduser --disabled-password --gecos "" appuser
 
-COPY --from=dependencies /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=dependencies /usr/local/bin /usr/local/bin
+COPY --chown=appuser:appuser --from=dependencies /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --chown=appuser:appuser --from=dependencies /usr/local/bin /usr/local/bin
 
-COPY . .
+COPY --chown=appuser:appuser . .
 
 USER appuser
 
@@ -42,6 +42,8 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 # ─── Stage 3: Development (with hot reload) ────────────────────────────────
 FROM dependencies AS development
 
-COPY . .
+RUN adduser --disabled-password --gecos "" devuser
+COPY --chown=devuser:devuser . .
+USER devuser
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

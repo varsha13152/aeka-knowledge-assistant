@@ -1,8 +1,26 @@
 /**
  * API client for AEKA backend.
+ *
+ * Uses Clerk session tokens for authentication.
+ * Token is passed in from the calling component via setToken().
  */
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+// Token holder — set by components that have access to Clerk's useAuth()
+let _sessionToken: string | null = null;
+
+/**
+ * Set the current session token. Call this from a component
+ * that has access to Clerk's useAuth().getToken().
+ */
+export function setSessionToken(token: string | null) {
+  _sessionToken = token;
+}
+
+function getAuthHeaders(): Record<string, string> {
+  return _sessionToken ? { Authorization: `Bearer ${_sessionToken}` } : {};
+}
 
 class ApiClient {
   private baseUrl: string;
@@ -15,6 +33,7 @@ class ApiClient {
     const response = await fetch(`${this.baseUrl}${path}`, {
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
         ...options?.headers,
       },
       ...options,
@@ -41,7 +60,11 @@ class ApiClient {
 
     const response = await fetch(
       `${this.baseUrl}/api/v1/documents/upload?chunk_strategy=${strategy}`,
-      { method: 'POST', body: formData }
+      {
+        method: 'POST',
+        body: formData,
+        headers: getAuthHeaders(),
+      }
     );
 
     if (!response.ok) throw new Error('Upload failed');
@@ -49,7 +72,16 @@ class ApiClient {
   }
 
   async deleteDocument(id: string) {
-    await fetch(`${this.baseUrl}/api/v1/documents/${id}`, { method: 'DELETE' });
+    await fetch(`${this.baseUrl}/api/v1/documents/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+  }
+
+  async getDocumentUrl(documentId: string) {
+    return this.request<{ url: string; filename: string; content_type: string }>(
+      `/api/v1/documents/${documentId}/url`
+    );
   }
 
   // ─── Search ────────────────────────────────────────────────────────

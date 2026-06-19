@@ -3,13 +3,20 @@
 import json
 import uuid
 
-from fastapi import APIRouter, HTTPException
+import structlog
+from fastapi import APIRouter, HTTPException, Request
+
+from app.core.rate_limit import limiter
+
+logger = structlog.get_logger()
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.agents.graph import AgentState, agent_graph
-from app.core.auth import OptionalUser
+from app.agents.guardrails import check_injection
+from app.core.auth import CurrentUser
+from app.core.budget import check_budget
 from app.core.dependencies import DBSession
 from app.models.document import ChatMessage, ChatSession
 from app.services.llm import llm_client
@@ -63,7 +70,8 @@ NO_RAG_SYSTEM_PROMPT = """You are AEKA, an AI knowledge assistant for a primary 
 
 
 @router.post("/completions")
-async def chat_completion(request: ChatRequest, db: DBSession, user: OptionalUser):
+@limiter.limit("20/minute")
+async def chat_completion(request: ChatRequest, req: Request, db: DBSession, user: CurrentUser):
     """Generate a chat completion with optional agent orchestration.
 
     When use_agents=True (default):
@@ -87,6 +95,14 @@ async def chat_completion(request: ChatRequest, db: DBSession, user: OptionalUse
         db.add(session)
         await db.flush()
 
+    # Check per-user daily budget before calling LLM
+    is_allowed, remaining = await check_budget(db, user.id, user.role)
+    if not is_allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Daily usage budget exceeded. Please try again tomorrow.",
+        )
+
     # Store user message
     user_msg = ChatMessage(
         session_id=session.id,
@@ -109,6 +125,15 @@ async def chat_completion(request: ChatRequest, db: DBSession, user: OptionalUse
         )
 
     # ─── Direct RAG (non-agent) path ────────────────────────────────────
+
+    # Apply input guardrails (same as agent path)
+    is_injection, injection_reason = check_injection(request.message)
+    if is_injection:
+        raise HTTPException(
+            status_code=400,
+            detail="Your message was flagged by our safety filters. Please rephrase.",
+        )
+
     sources = []
     if request.use_rag:
         retrieval_results = await hybrid_search(db=db, query=request.message, top_k=8)
@@ -120,8 +145,12 @@ async def chat_completion(request: ChatRequest, db: DBSession, user: OptionalUse
             {
                 "chunk_id": str(chunk.chunk_id),
                 "document_id": str(chunk.document_id),
+                "filename": chunk.filename,
+                "content_type": chunk.content_type,
                 "content_preview": chunk.content[:200],
                 "score": chunk.fused_score,
+                "page_start": chunk.page_start,
+                "page_end": chunk.page_end,
             }
             for chunk in included_chunks
         ]
@@ -228,20 +257,25 @@ async def _stream_agent_response(db: DBSession, session_id: uuid.UUID, query: st
         }
         yield f"event: done\ndata: {json.dumps(metadata)}\n\n"
 
-        # Store assistant message in DB
-        assistant_msg = ChatMessage(
-            session_id=session_id,
-            role="assistant",
-            content=final_answer,
-            token_count=result.get("total_tokens"),
-            model_used="langgraph-multi-agent",
-            cost_usd=result.get("total_cost"),
-        )
-        db.add(assistant_msg)
-        await db.commit()
+        # Persist assistant message in a fresh session (avoids holding the
+        # request-scoped session open for the entire stream duration)
+        from app.db.session import async_session_factory
+
+        async with async_session_factory() as persist_db:
+            assistant_msg = ChatMessage(
+                session_id=session_id,
+                role="assistant",
+                content=final_answer,
+                token_count=result.get("total_tokens"),
+                model_used="langgraph-multi-agent",
+                cost_usd=result.get("total_cost"),
+            )
+            persist_db.add(assistant_msg)
+            await persist_db.commit()
 
     except Exception as e:
-        yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+        logger.exception("streaming_error", error=str(e))
+        yield f"event: error\ndata: {json.dumps({'error': 'An internal error occurred'})}\n\n"
 
 
 # ─── Direct Streaming (non-agent) ───────────────────────────────────────────
@@ -270,27 +304,33 @@ async def _stream_direct_response(
 
         yield f"event: done\ndata: {json.dumps(metadata)}\n\n"
 
-        assistant_msg = ChatMessage(
-            session_id=session_id,
-            role="assistant",
-            content=full_content,
-            token_count=metadata.get("output_tokens"),
-            model_used=metadata.get("model"),
-            cost_usd=metadata.get("cost_usd"),
-        )
-        db.add(assistant_msg)
-        await db.commit()
+        # Persist assistant message in a fresh session
+        from app.db.session import async_session_factory
+
+        async with async_session_factory() as persist_db:
+            assistant_msg = ChatMessage(
+                session_id=session_id,
+                role="assistant",
+                content=full_content,
+                token_count=metadata.get("output_tokens"),
+                model_used=metadata.get("model"),
+                cost_usd=metadata.get("cost_usd"),
+            )
+            persist_db.add(assistant_msg)
+            await persist_db.commit()
 
     except Exception as e:
-        yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+        logger.exception("streaming_error", error=str(e))
+        yield f"event: error\ndata: {json.dumps({'error': 'An internal error occurred'})}\n\n"
 
 
 # ─── Session Management ─────────────────────────────────────────────────────
 
 
 @router.get("/sessions")
-async def list_sessions(db: DBSession, limit: int = 20):
+async def list_sessions(db: DBSession, user: CurrentUser, limit: int = 20):
     """List recent chat sessions."""
+    limit = min(limit, 50)  # Cap pagination
     result = await db.execute(
         select(ChatSession).order_by(ChatSession.created_at.desc()).limit(limit)
     )
@@ -302,7 +342,7 @@ async def list_sessions(db: DBSession, limit: int = 20):
 
 
 @router.get("/sessions/{session_id}/messages")
-async def get_session_messages(session_id: uuid.UUID, db: DBSession):
+async def get_session_messages(session_id: uuid.UUID, db: DBSession, user: CurrentUser):
     """Get all messages in a chat session."""
     result = await db.execute(
         select(ChatMessage)

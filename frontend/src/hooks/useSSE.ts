@@ -3,12 +3,12 @@
  *
  * Handles:
  * - EventSource connection lifecycle
- * - Typed event parsing (sources, token, done, error)
- * - Automatic reconnection
+ * - Typed event parsing (sources, token, done, error, agent_step)
  * - Cleanup on unmount
  */
 
 import { useCallback, useRef } from 'react';
+import { useAuth } from '@clerk/nextjs';
 import { useChatStore } from '@/stores/chatStore';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -21,6 +21,7 @@ interface ChatRequestOptions {
 }
 
 export function useSSE() {
+  const { getToken } = useAuth();
   const abortControllerRef = useRef<AbortController | null>(null);
   const {
     addMessage,
@@ -31,6 +32,46 @@ export function useSSE() {
     setLoading,
     setStreaming,
   } = useChatStore();
+
+  const handleSSEEvent = useCallback((eventType: string, data: any) => {
+    switch (eventType) {
+      case 'token':
+        if (data.content !== undefined) {
+          updateStreamingContent(data.content);
+        }
+        break;
+
+      case 'sources':
+        addAgentStep({ node: 'retrieval', action: 'sources_retrieved', sources: data });
+        break;
+
+      case 'agent_step':
+        addAgentStep(data);
+        break;
+
+      case 'done':
+        finalizeStreaming(data);
+        break;
+
+      case 'error':
+        addMessage({
+          id: crypto.randomUUID(),
+          role: 'system',
+          content: `Error: ${data.error || 'An unknown error occurred'}`,
+          createdAt: new Date().toISOString(),
+        });
+        break;
+
+      default:
+        // Unknown event type — try heuristic fallback for backward compat
+        if (data.content !== undefined && !data.is_final) {
+          updateStreamingContent(data.content);
+        } else if (data.is_final || data.input_tokens !== undefined) {
+          finalizeStreaming(data);
+        }
+        break;
+    }
+  }, [updateStreamingContent, addAgentStep, finalizeStreaming, addMessage]);
 
   const sendMessage = useCallback(async (options: ChatRequestOptions) => {
     const { message, sessionId, useRag = true, maxContextTokens = 4096 } = options;
@@ -53,9 +94,13 @@ export function useSSE() {
     abortControllerRef.current = new AbortController();
 
     try {
+      const token = await getToken();
       const response = await fetch(`${API_URL}/api/v1/chat/completions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           message,
           session_id: sessionId,
@@ -75,6 +120,7 @@ export function useSSE() {
 
       const decoder = new TextDecoder();
       let buffer = '';
+      let currentEventType = 'token'; // Default event type
 
       setStreaming(true);
 
@@ -88,18 +134,16 @@ export function useSSE() {
 
         for (const line of lines) {
           if (line.startsWith('event: ')) {
-            const eventType = line.slice(7).trim();
-            continue;
-          }
-
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
+            currentEventType = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
             try {
-              const parsed = JSON.parse(data);
-              handleSSEEvent(parsed);
+              const parsed = JSON.parse(line.slice(6));
+              handleSSEEvent(currentEventType, parsed);
             } catch {
               // Skip malformed JSON
             }
+            // Reset to default after processing data
+            currentEventType = 'token';
           }
         }
       }
@@ -116,34 +160,7 @@ export function useSSE() {
       setLoading(false);
       setStreaming(false);
     }
-  }, [addMessage, updateStreamingContent, finalizeStreaming, addAgentStep, clearAgentSteps, setLoading, setStreaming]);
-
-  const handleSSEEvent = useCallback((data: any) => {
-    // Token event: append to streaming content
-    if (data.content !== undefined && !data.is_final) {
-      updateStreamingContent(data.content);
-    }
-
-    // Sources event: store for display
-    if (Array.isArray(data) && data[0]?.chunk_id) {
-      addAgentStep({ node: 'retrieval', action: 'sources_retrieved', sources: data });
-    }
-
-    // Done event: finalize the message
-    if (data.input_tokens !== undefined || data.is_final) {
-      finalizeStreaming(data);
-    }
-
-    // Error event
-    if (data.error) {
-      addMessage({
-        id: crypto.randomUUID(),
-        role: 'system',
-        content: `Error: ${data.error}`,
-        createdAt: new Date().toISOString(),
-      });
-    }
-  }, [updateStreamingContent, addAgentStep, finalizeStreaming, addMessage]);
+  }, [addMessage, handleSSEEvent, clearAgentSteps, setLoading, setStreaming, getToken]);
 
   const abort = useCallback(() => {
     abortControllerRef.current?.abort();

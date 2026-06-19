@@ -69,8 +69,12 @@ async def research_node(state: dict) -> dict:
             "source_index": i + 1,
             "chunk_id": str(chunk.chunk_id),
             "document_id": str(chunk.document_id),
+            "filename": chunk.filename,
+            "content_type": chunk.content_type,
             "content_preview": chunk.content[:200],
             "relevance_score": chunk.fused_score,
+            "page_start": chunk.page_start,
+            "page_end": chunk.page_end,
         }
         for i, chunk in enumerate(included_chunks)
     ]

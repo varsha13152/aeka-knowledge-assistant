@@ -234,6 +234,15 @@ def chunk_semantic(
     return chunks
 
 
+def _extract_page_numbers(text: str) -> tuple[int | None, int | None]:
+    """Extract page range from [Page N] markers embedded in chunk text."""
+    pages = re.findall(r"\[Page (\d+)\]", text)
+    if not pages:
+        return None, None
+    page_nums = [int(p) for p in pages]
+    return min(page_nums), max(page_nums)
+
+
 def chunk_document(
     text: str,
     strategy: ChunkStrategy = ChunkStrategy.RECURSIVE,
@@ -245,4 +254,13 @@ def chunk_document(
         ChunkStrategy.RECURSIVE: chunk_recursive,
         ChunkStrategy.SEMANTIC: chunk_semantic,
     }
-    return strategies[strategy](text, **kwargs)
+    chunks = strategies[strategy](text, **kwargs)
+
+    # Enrich chunks with page number metadata (from PDF [Page N] markers)
+    for chunk in chunks:
+        page_start, page_end = _extract_page_numbers(chunk.content)
+        if page_start is not None:
+            chunk.metadata["page_start"] = page_start
+            chunk.metadata["page_end"] = page_end
+
+    return chunks

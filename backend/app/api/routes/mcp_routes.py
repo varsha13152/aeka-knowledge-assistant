@@ -8,6 +8,7 @@ Exposes the MCP tool server over HTTP for external LLM clients:
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.core.auth import AdminUser
 from app.mcp.server import execute_tool, get_tool_definitions
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
@@ -25,21 +26,23 @@ class ToolExecuteResponse(BaseModel):
 
 
 @router.get("/tools")
-async def list_tools():
+async def list_tools(current_user: AdminUser):
     """List all available MCP tools with their schemas.
 
     Clients use this for tool discovery — the response follows
     the MCP protocol format for tool definitions.
+    Requires admin/tutor role.
     """
     return {"tools": get_tool_definitions()}
 
 
 @router.post("/execute", response_model=ToolExecuteResponse)
-async def execute_mcp_tool(request: ToolExecuteRequest):
+async def execute_mcp_tool(request: ToolExecuteRequest, current_user: AdminUser):
     """Execute an MCP tool by name with the provided arguments.
 
     The tool name must match one returned by GET /mcp/tools.
     Arguments are validated against the tool's input_schema.
+    Requires admin/tutor role.
     """
     result = await execute_tool(request.name, request.arguments)
 

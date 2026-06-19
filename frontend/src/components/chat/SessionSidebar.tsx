@@ -6,19 +6,15 @@
 
 import { useCallback, useEffect } from 'react';
 import { useChatStore, type ChatSession } from '@/stores/chatStore';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import { api } from '@/lib/api';
 
 export function SessionSidebar() {
   const { sessions, activeSessionId, setActiveSession, setSessions, reset } = useChatStore();
 
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/v1/chat/sessions`);
-      if (res.ok) {
-        const data = await res.json();
-        setSessions(data);
-      }
+      const data = await api.listSessions();
+      setSessions(data);
     } catch (err) {
       console.error('Failed to fetch sessions:', err);
     }
@@ -37,9 +33,8 @@ export function SessionSidebar() {
     setActiveSession(session.id);
     // Load messages for this session
     try {
-      const res = await fetch(`${API_URL}/api/v1/chat/sessions/${session.id}/messages`);
-      if (res.ok) {
-        const messages = await res.json();
+      const messages = await api.getSessionMessages(session.id);
+      if (messages) {
         // Update store with loaded messages
         reset();
         messages.forEach((msg: any) => {

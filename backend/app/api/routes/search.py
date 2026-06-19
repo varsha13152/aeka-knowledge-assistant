@@ -2,10 +2,12 @@
 
 import uuid
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
+from app.core.auth import CurrentUser
 from app.core.dependencies import DBSession
+from app.core.rate_limit import limiter
 from app.services.retrieval import hybrid_search
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -41,7 +43,8 @@ class SearchResponse(BaseModel):
 
 
 @router.post("/", response_model=SearchResponse)
-async def search_documents(request: SearchRequest, db: DBSession):
+@limiter.limit("30/minute")
+async def search_documents(request: SearchRequest, req: Request, db: DBSession, current_user: CurrentUser):
     """Perform hybrid search across all document chunks.
 
     Combines semantic (vector) search with keyword (BM25) search using

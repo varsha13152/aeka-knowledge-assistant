@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.core.auth import AdminUser
 from app.agents.evaluation.drift_detector import drift_detector
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
@@ -14,8 +15,8 @@ class MetricsSummary(BaseModel):
 
 
 @router.get("/", response_model=MetricsSummary)
-async def get_metrics():
-    """Get current system metrics and drift analysis."""
+async def get_metrics(current_user: AdminUser):
+    """Get current system metrics and drift analysis. Requires admin/tutor role."""
     report = drift_detector.analyze()
 
     return MetricsSummary(

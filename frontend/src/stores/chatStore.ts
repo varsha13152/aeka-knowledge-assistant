@@ -6,6 +6,7 @@
  * - Streaming state (partial tokens)
  * - Agent step visualization
  * - Session management
+ * - Document viewer state
  */
 
 import { create } from 'zustand';
@@ -13,8 +14,12 @@ import { create } from 'zustand';
 export interface Source {
   chunk_id: string;
   document_id: string;
+  filename: string | null;
+  content_type: string | null;
   content_preview: string;
   score: number;
+  page_start: number | null;
+  page_end: number | null;
 }
 
 export interface AgentStep {
@@ -43,6 +48,14 @@ export interface ChatSession {
   createdAt: string;
 }
 
+export interface ActiveDocument {
+  documentId: string;
+  filename: string;
+  contentType: string;
+  page: number;
+  highlightText: string;
+}
+
 interface ChatState {
   // Sessions
   sessions: ChatSession[];
@@ -58,6 +71,9 @@ interface ChatState {
   activeAgentSteps: AgentStep[];
   showAgentPanel: boolean;
 
+  // Document viewer
+  activeDocument: ActiveDocument | null;
+
   // Actions
   setActiveSession: (sessionId: string | null) => void;
   addMessage: (message: Message) => void;
@@ -69,6 +85,8 @@ interface ChatState {
   setStreaming: (streaming: boolean) => void;
   toggleAgentPanel: () => void;
   setSessions: (sessions: ChatSession[]) => void;
+  openDocumentViewer: (doc: ActiveDocument) => void;
+  closeDocumentViewer: () => void;
   reset: () => void;
 }
 
@@ -81,6 +99,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamingContent: '',
   activeAgentSteps: [],
   showAgentPanel: true,
+  activeDocument: null,
 
   setActiveSession: (sessionId) => set({ activeSessionId: sessionId }),
 
@@ -97,10 +116,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   finalizeStreaming: (metadata) =>
     set((state) => {
+      // Extract sources from agent steps
+      const sourcesStep = state.activeAgentSteps.find(
+        (s) => s.action === 'sources_retrieved'
+      );
+      const sources: Source[] = sourcesStep?.sources || [];
+
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
         content: state.streamingContent,
+        sources: sources.length > 0 ? sources : undefined,
         model: metadata.model,
         latencyMs: metadata.latency_ms,
         costUsd: metadata.cost_usd,
@@ -128,6 +154,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   toggleAgentPanel: () => set((state) => ({ showAgentPanel: !state.showAgentPanel })),
   setSessions: (sessions) => set({ sessions }),
 
+  openDocumentViewer: (doc) => set({ activeDocument: doc }),
+  closeDocumentViewer: () => set({ activeDocument: null }),
+
   reset: () =>
     set({
       messages: [],
@@ -135,5 +164,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isStreaming: false,
       isLoading: false,
       activeAgentSteps: [],
+      activeDocument: null,
     }),
 }));

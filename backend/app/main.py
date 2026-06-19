@@ -5,9 +5,12 @@ from contextlib import asynccontextmanager
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
-from app.api.routes import auth, chat, documents, mcp_routes, metrics, review, search
+from app.api.routes import chat, documents, mcp_routes, metrics, review, search
 from app.core.config import get_settings
+from app.core.rate_limit import limiter
 
 settings = get_settings()
 
@@ -34,25 +37,9 @@ async def lifespan(app: FastAPI):
     """Application lifecycle: startup and shutdown hooks."""
     logger.info("Starting AEKA backend", env=settings.app_env)
 
-    # Create S3 bucket if it doesn't exist (for local dev with MinIO)
-    if settings.app_env == "development":
-        try:
-            import boto3
-
-            s3 = boto3.client(
-                "s3",
-                endpoint_url=settings.s3_endpoint_url,
-                aws_access_key_id=settings.s3_access_key,
-                aws_secret_access_key=settings.s3_secret_key,
-                region_name=settings.aws_region,
-            )
-            try:
-                s3.head_bucket(Bucket=settings.s3_bucket_name)
-            except Exception:
-                s3.create_bucket(Bucket=settings.s3_bucket_name)
-                logger.info("Created S3 bucket", bucket=settings.s3_bucket_name)
-        except Exception as e:
-            logger.warning("Could not initialize S3 bucket", error=str(e))
+    # Ensure storage bucket exists (idempotent)
+    from app.services.storage import storage_service
+    storage_service.ensure_bucket_exists()
 
     yield
 
@@ -66,18 +53,34 @@ app = FastAPI(
     description="Multi-agent RAG system with streaming responses and HITL workflows",
     version="0.1.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # Disable API docs in non-development environments
+    docs_url="/docs" if settings.app_env == "development" else None,
+    redoc_url="/redoc" if settings.app_env == "development" else None,
 )
+
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ─── Middleware ──────────────────────────────────────────────────────────────
 
+from app.core.middleware import ErrorHandlerMiddleware, RequestIDMiddleware, SecurityHeadersMiddleware
+
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(ErrorHandlerMiddleware)
+
+# CORS: restrict origins to production frontend; allow localhost only in development
+_cors_origins = [settings.frontend_url]
+if settings.app_env == "development":
+    _cors_origins.extend(["http://localhost:3000", "http://localhost:3002"])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:3000", "http://localhost:3002"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 
 # ─── OpenTelemetry Instrumentation ─────────────────────────────────────────
@@ -89,7 +92,6 @@ app.add_middleware(
 
 # ─── Routes ─────────────────────────────────────────────────────────────────
 
-app.include_router(auth.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 app.include_router(search.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")

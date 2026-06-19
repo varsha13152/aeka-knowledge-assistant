@@ -11,10 +11,14 @@ class Settings(BaseSettings):
 
     # ─── Application ────────────────────────────────────────────────────
     app_env: Literal["development", "staging", "production"] = "development"
-    app_secret_key: str = "change-me-in-production"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     frontend_url: str = "http://localhost:3000"
+
+    # ─── Auth (Clerk) ──────────────────────────────────────────────────
+    clerk_secret_key: str = ""
+    clerk_publishable_key: str = ""
+    clerk_jwks_url: str = ""  # e.g. https://<clerk-domain>/.well-known/jwks.json
 
     # ─── Database ───────────────────────────────────────────────────────
     postgres_host: str = "localhost"
@@ -45,12 +49,12 @@ class Settings(BaseSettings):
     def redis_url(self) -> str:
         return f"redis://{self.redis_host}:{self.redis_port}/0"
 
-    # ─── Object Storage ─────────────────────────────────────────────────
-    s3_endpoint_url: str = "http://localhost:9000"
-    s3_access_key: str = "minioadmin"
-    s3_secret_key: str = "minioadmin"
-    s3_bucket_name: str = "aeka-documents"
-    aws_region: str = "us-east-1"
+    # ─── Object Storage (Cloudflare R2) ─────────────────────────────────
+    r2_endpoint_url: str = "https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com"
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket_name: str = "aeka-documents"
+    r2_account_id: str = ""
 
     # ─── LLM ────────────────────────────────────────────────────────────
     openai_api_key: str = ""

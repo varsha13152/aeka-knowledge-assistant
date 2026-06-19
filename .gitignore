@@ -12,10 +12,17 @@ node_modules/
 .next/
 out/
 
-# Environment
+# Environment & Secrets
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
 
 # IDE
 .vscode/

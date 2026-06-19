@@ -181,26 +181,35 @@ resource "aws_elasticache_cluster" "main" {
   subnet_group_name    = aws_elasticache_subnet_group.main.name
 }
 
-# ─── S3 for Document Storage ────────────────────────────────────────────────
+# ─── Cloudflare R2 for Document Storage ─────────────────────────────────────
 
-resource "aws_s3_bucket" "documents" {
-  bucket = "${var.app_name}-documents-${var.environment}"
-}
-
-resource "aws_s3_bucket_versioning" "documents" {
-  bucket = aws_s3_bucket.documents.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "documents" {
-  bucket = aws_s3_bucket.documents.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+terraform {
+  required_providers {
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 4.0"
     }
   }
+}
+
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token
+}
+
+resource "cloudflare_r2_bucket" "documents" {
+  account_id = var.cloudflare_account_id
+  name       = "${var.app_name}-documents-${var.environment}"
+}
+
+variable "cloudflare_account_id" {
+  description = "Cloudflare account ID for R2 storage"
+  type        = string
+}
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with R2 permissions"
+  type        = string
+  sensitive   = true
 }
 
 # ─── CloudFront CDN (Frontend) ──────────────────────────────────────────────
